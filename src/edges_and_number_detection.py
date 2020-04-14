@@ -25,7 +25,8 @@ def white_field_detector():
 
 def red_numbers_detector():
 
-    global refresh , contour_thresh , max_contour_thresh
+    global refresh , contour_thresh , contour_max_thresh
+    global contour_min_area , contour_max_area
 
     if refresh == True:
 
@@ -41,17 +42,20 @@ def red_numbers_detector():
         #mask = cv2.inRange(hsv, lower_red_1, upper_red_1) + cv2.inRange(hsv, lower_red_2, upper_red_2)
         #res = cv2.bitwise_and(frame,frame, mask= mask)
 
-        #retrieving red filter
-
-
-        cv2.namedWindow('Red Mask')
+        #retrieving blue filter
+        cv2.namedWindow('Blue Mask')
         cv2.namedWindow('ROI Contours')
 
-        max_contour_thresh = parameters.get('max_contour_thresh')
+        contour_max_thresh = parameters.get('contour_max_thresh')
         contour_thresh = parameters.get('contour_thresh')
 
+        contour_min_area = parameters.get('contour_min_area')
+        contour_max_area = parameters.get('contour_max_area')
+
         # show thresholded images
-        cv2.createTrackbar('ROI_THRESHOLD','ROI Contours', contour_thresh, max_contour_thresh,callback)
+        cv2.createTrackbar('ROI_THRESHOLD','ROI Contours', contour_thresh, contour_max_thresh,callback)
+
+        cv2.createTrackbar('MINIMUM_AREA','ROI Contours', contour_min_area, contour_max_area,callback)
 
         refresh = False
 
@@ -60,18 +64,22 @@ def red_numbers_detector():
     parameters['contour_thresh'] = cv2.getTrackbarPos('ROI_THRESHOLD', 'ROI Contours')
     contour_thresh = parameters.get('contour_thresh')
 
-    red_mask = cv2.inRange(hsv, red_lower_hsv, red_higher_hsv)
-    red_res = cv2.bitwise_and(frame, frame, mask=red_mask)
+    parameters['contour_min_area'] = cv2.getTrackbarPos('MINIMUM_AREA', 'ROI Contours')
+    contour_min_area = parameters.get('contour_min_area')
 
-    src_gray = cv2.cvtColor(red_res, cv2.COLOR_BGR2GRAY)
+    blue_lower_hsv = np.array([blue_h_min, blue_s_min, blue_v_min])
+    blue_higher_hsv = np.array([blue_h_max, blue_s_max, blue_v_max])
+
+    blue_mask = cv2.inRange(hsv, blue_lower_hsv, blue_higher_hsv)
+    blue_res = cv2.bitwise_and(frame, frame, mask=blue_mask)
+
+    src_gray = cv2.cvtColor(blue_res, cv2.COLOR_BGR2GRAY)
     src_gray = cv2.blur(src_gray, (3,3))
-
-
 
 
     canny_output = cv2.Canny(src_gray, contour_thresh, contour_thresh * 2)
 
-    _, contours, _ = cv2.findContours(canny_output, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    _, contours, _ = cv2.findContours(canny_output, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     contours_poly = [None]*len(contours)
     boundRect = [None]*len(contours)
@@ -85,15 +93,26 @@ def red_numbers_detector():
 
     drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 3), dtype=np.uint8)
 
+    color = (0, 255 , 0)
+    cell_counter = 0
+
     for i in range(len(contours)):
-        color = (0, 255 , 0)
-        cv2.drawContours(drawing, contours_poly, i, color)
-        cv2.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), \
-          (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
-        cv2.circle(drawing, (int(centers[i][0]), int(centers[i][1])), int(radius[i]), color, 2)
+        if (cv2.contourArea(contours[i]) > contour_min_area):
+            cv2.drawContours(drawing, contours_poly, i, color)
+            #cv2.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), \
+             # (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
+            #cv2.circle(drawing, (int(centers[i][0]), int(centers[i][1])), int(radius[i]), color, 2)
+            cell_counter+=1
 
+    font                   = cv2.FONT_HERSHEY_SIMPLEX
+    bottomLeftCornerOfText = (10,500)
+    fontScale              = 1
+    fontColor              = (0,255,0)
+    lineType               = 2
 
-    cv2.imshow('Red Mask', red_res)
+    cv2.putText(drawing,'Occupied cells: ' + str(cell_counter) , bottomLeftCornerOfText,font,fontScale,fontColor,lineType)
+
+    cv2.imshow('Blue Mask', blue_res)
     cv2.imshow('ROI Contours', drawing)
 
     #cv2.imshow('red_binary_filter',mask)
@@ -308,11 +327,6 @@ def callback(x):
 #END OF FUNCTIONS
 #----------------------------------------
 
-
-
-
-
-
 calibrator_flag = False # to start it
 calibrator_state = False # to know the status (starting vs started)
 
@@ -322,7 +336,7 @@ refresh = True
 
 
 
-cap = cv2.VideoCapture(2) #0 is default but 2 is my ext. webcam
+cap = cv2.VideoCapture(0) #0 is default but 2 is my ext. webcam
 
 #Just once to populate the Dictionary----------------------------------------------
 ret, frame = cap.read()  #frame is an uint8 numpy.ndarray
@@ -354,7 +368,7 @@ while True:
 
 
 
-    if cv2.waitKey(100) == ord('c'):
+    if cv2.waitKey(10) == ord('c'):
         if calibrator_flag == False:
             calibrator_state = False
             calibrator_flag  = True
@@ -365,7 +379,7 @@ while True:
             with open('parameters.json', 'w') as fp:
                 json.dump(parameters, fp, indent=4)
 
-    elif cv2.waitKey(100) == ord('q'):  #  milisecond delay. press q to exit.
+    elif cv2.waitKey(10) == ord('q'):  #  milisecond delay. press q to exit.
         with open('parameters.json', 'w') as fp:
             json.dump(parameters, fp, indent=4)
         break
