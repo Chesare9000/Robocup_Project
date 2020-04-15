@@ -3,9 +3,6 @@ import numpy as np
 import time
 import json
 
-#initial values for the color filtering
-from values import *
-
 
 def white_field_detector():
 
@@ -46,6 +43,10 @@ def red_numbers_detector():
         cv2.namedWindow('Blue Mask')
         cv2.namedWindow('ROI Contours')
 
+        cv2.namedWindow('Red Mask')
+        cv2.namedWindow('Number Contours')
+
+
         contour_max_thresh = parameters.get('contour_max_thresh')
         contour_thresh = parameters.get('contour_thresh')
 
@@ -73,47 +74,88 @@ def red_numbers_detector():
     blue_mask = cv2.inRange(hsv, blue_lower_hsv, blue_higher_hsv)
     blue_res = cv2.bitwise_and(frame, frame, mask=blue_mask)
 
-    src_gray = cv2.cvtColor(blue_res, cv2.COLOR_BGR2GRAY)
-    src_gray = cv2.blur(src_gray, (3,3))
+    red_lower_hsv = np.array([red_h_min, red_s_min, red_v_min])
+    red_higher_hsv = np.array([red_h_max, red_s_max, red_v_max])
+
+    red_mask = cv2.inRange(hsv, red_lower_hsv, red_higher_hsv)
+    red_res = cv2.bitwise_and(frame, frame, mask=red_mask)
 
 
-    canny_output = cv2.Canny(src_gray, contour_thresh, contour_thresh * 2)
+    src_gray_for_blue = cv2.cvtColor(blue_res, cv2.COLOR_BGR2GRAY)
+    src_gray_for_blue = cv2.blur(src_gray_for_blue, (3,3))
 
-    _, contours, _ = cv2.findContours(canny_output, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    src_gray_for_red = cv2.cvtColor(red_res, cv2.COLOR_BGR2GRAY)
+    src_gray_for_red = cv2.blur(src_gray_for_red, (3,3))
 
-    contours_poly = [None]*len(contours)
-    boundRect = [None]*len(contours)
-    centers = [None]*len(contours)
-    radius = [None]*len(contours)
 
-    for i, c in enumerate(contours):
-        contours_poly[i] = cv2.approxPolyDP(c, 3, True)
-        boundRect[i] = cv2.boundingRect(contours_poly[i])
-        centers[i], radius[i] = cv2.minEnclosingCircle(contours_poly[i])
+    canny_output_for_blue = cv2.Canny(src_gray_for_blue, contour_thresh, contour_thresh * 2)
+    canny_output_for_red = cv2.Canny(src_gray_for_red, contour_thresh, contour_thresh * 2)
 
-    drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 3), dtype=np.uint8)
+    _, blue_contours, _ = cv2.findContours(canny_output_for_blue, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    _, red_contours, _ = cv2.findContours(canny_output_for_red, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    color = (0, 255 , 0)
-    cell_counter = 0
+    blue_contours_poly = [None]*len(blue_contours)
+    blue_boundRect = [None]*len(blue_contours)
+    blue_centers = [None]*len(blue_contours)
+    blue_radius = [None]*len(blue_contours)
 
-    for i in range(len(contours)):
-        if (cv2.contourArea(contours[i]) > contour_min_area):
-            cv2.drawContours(drawing, contours_poly, i, color)
+    red_contours_poly = [None]*len(red_contours)
+    red_boundRect = [None]*len(red_contours)
+    red_centers = [None]*len(red_contours)
+    red_radius = [None]*len(red_contours)
+
+
+    for i, c in enumerate(blue_contours):
+        blue_contours_poly[i] = cv2.approxPolyDP(c, 3, True)
+        blue_boundRect[i] = cv2.boundingRect(blue_contours_poly[i])
+        blue_centers[i], blue_radius[i] = cv2.minEnclosingCircle(blue_contours_poly[i])
+
+    for i, c in enumerate(red_contours):
+        red_contours_poly[i] = cv2.approxPolyDP(c, 3, True)
+        red_boundRect[i] = cv2.boundingRect(red_contours_poly[i])
+        red_centers[i], red_radius[i] = cv2.minEnclosingCircle(red_contours_poly[i])
+
+    blue_drawing = np.zeros((canny_output_for_blue.shape[0], canny_output_for_blue.shape[1], 3), dtype=np.uint8)
+    red_drawing = np.zeros((canny_output_for_red.shape[0], canny_output_for_red.shape[1], 3), dtype=np.uint8)
+
+    blue_color = (255, 0 , 0)
+    red_color = (0,0,255)
+
+    blue_cell_counter = 0
+    red_cell_counter = 0
+
+    for i in range(len(blue_contours)):
+        if (cv2.contourArea(blue_contours[i]) > contour_min_area):
+            cv2.drawContours(blue_drawing, blue_contours_poly, i, blue_color)
             #cv2.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), \
              # (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
             #cv2.circle(drawing, (int(centers[i][0]), int(centers[i][1])), int(radius[i]), color, 2)
-            cell_counter+=1
+            blue_cell_counter+=1
+
+    for i in range(len(red_contours)):
+        if (cv2.contourArea(red_contours[i]) > contour_min_area):
+            cv2.drawContours(red_drawing, red_contours_poly, i, red_color)
+            #cv2.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), \
+             # (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
+            #cv2.circle(drawing, (int(centers[i][0]), int(centers[i][1])), int(radius[i]), color, 2)
+            red_cell_counter+=1
 
     font                   = cv2.FONT_HERSHEY_SIMPLEX
     bottomLeftCornerOfText = (10,500)
+#   bottomLeftCornerOfText = (10,450) Depends on the webcam resolution
     fontScale              = 1
     fontColor              = (0,255,0)
     lineType               = 2
 
-    cv2.putText(drawing,'Occupied cells: ' + str(cell_counter) , bottomLeftCornerOfText,font,fontScale,fontColor,lineType)
+    cv2.putText(blue_drawing,'Occupied cells: ' + str(blue_cell_counter) , bottomLeftCornerOfText,font,fontScale,fontColor,lineType)
+
+    cv2.putText(red_drawing,'Empty cells: ' + str(red_cell_counter) , bottomLeftCornerOfText,font,fontScale,fontColor,lineType)
 
     cv2.imshow('Blue Mask', blue_res)
-    cv2.imshow('ROI Contours', drawing)
+    cv2.imshow('ROI Contours', blue_drawing)
+
+    cv2.imshow('Red Mask', red_res)
+    cv2.imshow('Number Contours', red_drawing)
 
     #cv2.imshow('red_binary_filter',mask)
     #cv2.imshow('red_mask',res)
@@ -304,6 +346,7 @@ def calibrator():
     red_mask = cv2.inRange(hsv, red_lower_hsv, red_higher_hsv)
     green_mask = cv2.inRange(hsv, green_lower_hsv, green_higher_hsv)
     blue_mask = cv2.inRange(hsv, blue_lower_hsv, blue_higher_hsv)
+
 
     red_res = cv2.bitwise_and(frame, frame, mask=red_mask)
     green_res = cv2.bitwise_and(frame, frame, mask=green_mask)
