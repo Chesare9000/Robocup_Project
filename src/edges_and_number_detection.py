@@ -1,3 +1,8 @@
+#ROBOCUP PROJECT
+#CESAR GONZALEZ CRUZ
+#Student ID: 0414932
+
+
 import cv2
 import numpy as np
 import time
